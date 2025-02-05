@@ -1,0 +1,29 @@
+{
+  "generator-jhipster": {
+    "applicationType": "monolith",
+    "appsFolders": ["wedseven"],
+    "baseName": "wedseven",
+    "buildTool": "maven",
+    "cacheProvider": "hazelcast",
+    "clientFramework": null,
+    "clientPackageManager": null,
+    "clientTheme": null,
+    "creationTimestamp": 1738781281156,
+    "databaseType": "sql",
+    "directoryPath": "../",
+    "enableHibernateCache": false,
+    "enableTranslation": false,
+    "entities": [],
+    "jhipsterVersion": "8.8.0",
+    "jwtSecretKey": "ZWM0ODAyNDU4ZDIzMzM0YjU1ODJhNGEwOWZkYTlhYTlkYjBkODI1MzZlZTUyODkxNGMzYzUxYzU3MWVlY2EyODhkNjAwODA2ZTE5MzZhMDYwZGZmN2ZiNTdiODNiYTA4YzdiZGM2Njg0M2FiOTU5NzE0OTY3ZTNiMDIwY2M2ZmY=",
+    "microfrontend": false,
+    "monitoring": "no",
+    "nativeLanguage": "en",
+    "otherLanguages": null,
+    "prodDatabaseType": "postgresql",
+    "reactive": false,
+    "serviceDiscoveryType": "no",
+    "testFrameworks": null,
+    "websocket": null
+  }
+}
