@@ -1,39 +1,77 @@
-name: Deploy to EC2 and Run Docker
+name: Build, Push to ECR, and Deploy to EC2
 
 on:
-  workflow_run:
-    workflows: ["Build and Dockerize"]
-    types:
-      - completed
+  push:
+    branches:
+      - main
 
 jobs:
-  check-status:
+  build-and-push:
     runs-on: ubuntu-latest
-    steps:
-      - name: Print message
-        run: echo "Workflow received completion status from Build and Dockerize."
-
-  deploy-to-ec2:
-    runs-on: ubuntu-latest
-    needs: check-status
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
       AWS_REGION: ${{ secrets.AWS_REGION }}
-      EC2_PUBLIC_KEY: ${{ secrets.EC2_PUBLIC_KEY }}
+      ECR_REPOSITORY: wedseven
+      IMAGE_TAG: latest
+
+    steps:
+      # Step 1: Checkout the repository
+      - name: Checkout Code
+        uses: actions/checkout@v3
+
+      # Step 2: Set up Java environment
+      - name: Set up Java 17
+        uses: actions/setup-java@v3
+        with:
+          distribution: 'temurin'
+          java-version: '17'
+
+      # Step 3: Build Maven project
+      - name: Build Maven Project
+        run: |
+          chmod +x mvnw
+          ./mvnw package -Pprod -DskipTests
+
+      # Step 4: Set up Docker
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+
+      # Step 5: Log in to Amazon ECR
+      - name: Log in to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Step 6: Build and Push Docker Image to ECR
+      - name: Build and Push Docker Image
+        env:
+          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+        run: |
+          docker image tag wedfour null.dkr.ecr.us-east-1.amazonaws.com/wedfour:latest
+          docker push null.dkr.ecr.us-east-1.amazonaws.com/wedfour:latest
+
+  deploy-to-ec2:
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION: ${{ secrets.AWS_REGION }}
       EC2_SSH_PRIVATE_KEY: ${{ secrets.EC2_SSH_PRIVATE_KEY }}
+      ECR_REPOSITORY: wedseven
+      IMAGE_TAG: latest
 
     steps:
       - name: Checkout the repository
         uses: actions/checkout@v3
 
-      - name: SSH into EC2 Instance and Deploy Docker Image
+      - name: SSH into EC2 and Deploy Docker Image
         run: |
-          mkdir -p ~/.ssh
-          echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/${{ secrets.KEYPAIR_NAME }}.pem
-          chmod 600 ~/.ssh/${{ secrets.KEYPAIR_NAME }}.pem
-          ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
-          ssh -i ~/.ssh/${{ secrets.KEYPAIR_NAME }}.pem ubuntu@${{ secrets.EC2_IP }} <<EOF
+            mkdir -p ~/.ssh
+            echo "${{ secrets.EC2_SSH_PRIVATE_KEY }}" > ~/.ssh/ec2-key.pem
+            chmod 600 ~/.ssh/ec2-key.pem
+            ssh-keyscan -H ${{ secrets.EC2_IP }} >> ~/.ssh/known_hosts
+            ssh -i ~/.ssh/ec2-key.pem ubuntu@${{ secrets.EC2_IP }} <<EOF
             sudo apt update
             sudo apt install -y docker.io
             sudo systemctl start docker
@@ -44,24 +82,17 @@ jobs:
             sudo curl -L "https://github.com/docker/compose/releases/download/v$DOCKER_COMPOSE_VERSION/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
             sudo chmod +x /usr/local/bin/docker-compose
             docker-compose --version
+
+            # Pull and restart the new Docker container
+            aws ecr get-login-password --region ${{ env.AWS_REGION }} | docker login --username AWS --password-stdin ${{ steps.login-ecr.outputs.registry }}
+            docker pull null.dkr.ecr.us-east-1.amazonaws.com/wedfour:latest
+
+
+            #clone the docker-compose
+            git clone <a href="https://github.com/Acmf-api/awsdemocheck" rel="noreferrer noopener" title="https://github.com/acmf-api/awsdemocheck" target="_blank">https://github.com/Acmf-api/awsdemocheck</a>
+            cd awsdemocheck         
+
+            # Build and deploy the Docker image
+            docker-compose up -d
           EOF
-
-      - name: Log in to Amazon ECR
-        id: login-ecr
-        uses: aws-actions/amazon-ecr-login@v2
-
-
-
-      - name: Push Docker Image to ECR
-        env:
-          ECR_REGISTRY: ${{ steps.login-ecr.outputs.registry }}
-          ECR_REPOSITORY: wedseven
-          IMAGE_TAG: latest
-        run: |
-          docker image tag wedseven 637423430820.dkr.ecr.us-east-1.amazonaws.com/wedseven:latest
-          docker push 637423430820.dkr.ecr.us-east-1.amazonaws.com/wedseven:latest
-
-          if [ -d "wedseven" ]; then rm -rf wedseven; fi
-          git clone https://github.com/Acmf-api/wedseven
-          cd wedseven
-          docker-compose up -d
+ 
